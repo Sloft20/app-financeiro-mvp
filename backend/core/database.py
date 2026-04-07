@@ -20,6 +20,7 @@ def get_supabase(token: str = Depends(get_token)) -> Client:
     do usuário autenticado. Isso garante 100% de aderência ao Row-Level Security (RLS)
     nativo do Postgres, evitando consultas voadoras sem escopo.
     """
+    try:
         db: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
         db.postgrest.auth(token)
         return db
