@@ -22,8 +22,17 @@ def setup_initial_account(payload: AccountCreate, db: Client = Depends(get_supab
     Onboarding: Cria uma conta base e faz o SEED inicial de categorias essenciais para não quebrar a Foreign Key.
     """
     try:
+        user = db.auth.get_user().user
+        if not user:
+             raise HTTPException(status_code=401, detail="Log in required")
+             
+        uid = user.id
+        
+        # 0. Garante que o usuário existe na tabela pública (Emulação de Auth Trigger)
+        db.table("users").upsert({"id": uid, "email": user.email}).execute()
+
         # 1. Cadastra a conta principal
-        insert_data = {"name": payload.name, "type": payload.type.value, "balance": float(payload.balance)}
+        insert_data = {"user_id": uid, "name": payload.name, "type": payload.type.value, "balance": float(payload.balance)}
         res = db.table("accounts").insert(insert_data).execute()
         
         if not res.data:
@@ -32,12 +41,12 @@ def setup_initial_account(payload: AccountCreate, db: Client = Depends(get_supab
         created_account = res.data[0]
 
         # 2. SEED: Verifica se a pessoa já tem categorias
-        cat_check = db.table("categories").select("*").limit(1).execute()
+        cat_check = db.table("categories").select("*").eq("user_id", uid).limit(1).execute()
         if not cat_check.data:
             db.table("categories").insert([
-                {"name": "Salário Padrão", "type": "INCOME", "color_icon": "emerald"},
-                {"name": "Custo Fixo Diário", "type": "FIXED_EXPENSE", "color_icon": "orange"},
-                {"name": "Despesa Livre", "type": "VARIABLE_EXPENSE", "color_icon": "indigo"}
+                {"user_id": uid, "name": "Salário Padrão", "type": "INCOME", "color_icon": "emerald"},
+                {"user_id": uid, "name": "Custo Fixo Diário", "type": "FIXED_EXPENSE", "color_icon": "orange"},
+                {"user_id": uid, "name": "Despesa Livre", "type": "VARIABLE_EXPENSE", "color_icon": "indigo"}
             ]).execute()
 
         return created_account
