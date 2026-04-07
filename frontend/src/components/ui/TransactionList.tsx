@@ -90,7 +90,7 @@ export default function TransactionList() {
                                         
                                         <div className="flex items-center gap-4 z-10 bg-white group-hover:bg-slate-50 pl-2">
                                             <p className={`font-black text-sm text-right ${tx.type === 'INCOME' ? 'text-emerald-500' : isGhost ? 'text-slate-500' : 'text-rose-600'}`}>
-                                                {tx.type === 'INCOME' ? '+' : '-'} R$ {tx.amount.toFixed(2)}
+                                                {tx.type === 'INCOME' ? '+' : '-'} R$ {Number(tx.amount).toFixed(2)}
                                             </p>
                                         </div>
 
