@@ -29,7 +29,7 @@ export default function RootLayout({
       <body className={`${inter.className} bg-slate-900 flex items-center justify-center min-h-[100dvh] text-slate-800 antialiased overflow-hidden`}>
         <QueryProvider>
           <AuthProvider>
-            <main className="w-full max-w-md h-[100dvh] bg-slate-50 relative overflow-hidden flex flex-col sm:max-h-[850px] sm:rounded-[3rem] sm:border-[12px] sm:border-slate-800 sm:shadow-2xl mx-auto ring-1 ring-white/10">
+            <main className="w-full md:max-w-2xl lg:max-w-5xl h-[100dvh] bg-slate-50 relative overflow-hidden flex flex-col mx-auto md:shadow-2xl md:ring-1 md:ring-slate-200">
               {children}
             </main>
           </AuthProvider>

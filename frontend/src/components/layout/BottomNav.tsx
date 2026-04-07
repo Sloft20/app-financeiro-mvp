@@ -6,7 +6,7 @@ import SmartFAB from '@/components/ui/SmartFAB';
 
 export default function BottomNav() {
   return (
-    <div className="absolute bottom-0 w-full bg-white border-t border-slate-100 shadow-[0_-15px_40px_rgba(0,0,0,0.06)] rounded-t-[2.5rem] pb-safe z-40">
+    <div className="md:hidden absolute bottom-0 w-full bg-white border-t border-slate-100 shadow-[0_-15px_40px_rgba(0,0,0,0.06)] rounded-t-[2.5rem] pb-safe z-40">
       <div className="flex justify-between items-center h-20 px-6 relative max-w-md mx-auto pb-2">
         
         <Link href="/" className="flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors w-12 group">

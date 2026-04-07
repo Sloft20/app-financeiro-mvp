@@ -2,151 +2,288 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, Receipt, CalendarDays, AlertTriangle, Loader2, Wallet } from 'lucide-react';
+import { X, ChevronRight, Loader2, Utensils, DollarSign, Wallet, ArrowRightLeft } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
 import { useCreateTransaction, TransactionCreatePayload } from '@/hooks/useTransaction';
 import { useAccounts, useCategories } from '@/hooks/useAccounts';
 
-type FlowType = "DEBIT" | "CREDIT" | "INCOME" | "TRANSFER";
-type CatType = "INCOME" | "FIXED_EXPENSE" | "VARIABLE_EXPENSE" | "TRANSFER";
+type Tab = "GASTO" | "GANHO" | "TRANSFERENCIA";
+type PaymentMethod = "CREDITO" | "DEBITO";
+type PaymentCondition = "A_VISTA" | "PARCELADO" | "RECORRENTE";
+type DateSelection = "HOJE" | "OUTRO";
 
 export default function TransactionModal() {
   const isOpen = useUIStore((state) => state.isFabModalOpen);
   const setOpen = useUIStore((state) => state.setFabModalOpen);
   const { mutate, isPending } = useCreateTransaction();
   
-  // A engrenagem dinâmica! Puxamos as contas e as categorias reais do usuário
   const { data: accounts } = useAccounts();
   const { data: categories } = useCategories();
 
-  const [flow, setFlow] = useState<FlowType>("DEBIT");
+  const [activeTab, setActiveTab] = useState<Tab>("GASTO");
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState("");
-  const [categoryType, setCategoryType] = useState<CatType>("VARIABLE_EXPENSE");
-  const [isPaid, setIsPaid] = useState(true);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isInstallment, setIsInstallment] = useState(false);
+  
+  // Selections
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedDestinationAccountId, setSelectedDestinationAccountId] = useState<string | null>(null); // For Transfers
+
+  // Toggles
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CREDITO");
+  const [paymentCondition, setPaymentCondition] = useState<PaymentCondition>("A_VISTA");
+  const [dateSelection, setDateSelection] = useState<DateSelection>("HOJE");
 
   useEffect(() => {
-    if (isOpen) { 
+    if (isOpen) {
       setAmount("");
       setDescription("");
-      setShowAdvanced(false);
-      setIsInstallment(false);
-      setIsPaid(flow !== "CREDIT");
+      setPaymentMethod("DEBITO");
+      setPaymentCondition("A_VISTA");
+      setDateSelection("HOJE");
+      
+      if (accounts && accounts.length > 0) {
+          setSelectedAccountId(accounts[0].id);
+          if (accounts.length > 1) setSelectedDestinationAccountId(accounts[1].id);
+      }
     }
-  }, [isOpen, flow]);
+  }, [isOpen, accounts]);
+
+  // Bind categories smoothly to active Tab
+  useEffect(() => {
+    if (isOpen && categories && categories.length > 0) {
+         if (activeTab === "GASTO") {
+             const cat = categories.find(c => c.type === "VARIABLE_EXPENSE" || c.type === "FIXED_EXPENSE");
+             if (cat) setSelectedCategoryId(cat.id);
+         } else if (activeTab === "GANHO") {
+             const cat = categories.find(c => c.type === "INCOME");
+             if (cat) setSelectedCategoryId(cat.id);
+         }
+    }
+  }, [activeTab, categories, isOpen]);
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, "");
+    if (!val) {
+        setAmount("");
+        return;
+    }
+    const num = (parseInt(val) / 100).toFixed(2);
+    setAmount(num.replace(".", ","));
+  };
+
+  const getAmountColor = () => {
+    if (activeTab === "GASTO") return "text-rose-600";
+    if (activeTab === "GANHO") return "text-emerald-500";
+    return "text-slate-900";
+  };
+
+  const getActiveCategoryInfo = () => {
+     if (!categories || !selectedCategoryId) return { name: "Selecione", icon: <Utensils size={20} />, bg: "bg-slate-300" };
+     const cat = categories.find(c => c.id === selectedCategoryId);
+     if (!cat) return { name: "Desconhecido", icon: <Utensils size={20}/>, bg: "bg-slate-300" };
+     
+     if (cat.type === "INCOME") return { name: cat.name, icon: <DollarSign size={20}/>, bg: "bg-blue-600" };
+     return { name: cat.name, icon: <Utensils size={20}/>, bg: "bg-amber-500" };
+  };
+
+  const getActiveAccountInfo = (accId: string | null) => {
+     if (!accounts || !accId) return { name: "Selecione a conta" };
+     const acc = accounts.find(a => a.id === accId);
+     return { name: acc?.name || "Conta Oculta" };
+  };
 
   const handleSubmit = () => {
-    if (!amount || isNaN(parseFloat(amount.replace(",", ".")))) return;
+    if (!amount || amount === "0,00") return;
+    if (!selectedAccountId) return;
     
-    // Obter conta dinamica (assume a index 0 como checking principal se houver)
-    const activeAccountId = accounts?.[0]?.id;
-    if (!activeAccountId) return alert("Erro crítico: Nenhuma conta detectada.");
+    const parsedAmount = parseFloat(amount.replace(",", "."));
+    let type = "DEBIT";
+    let isPaid = true;
 
-    // Obter a categoria que satisfaça a logica (match pelo tipo)
-    const targetType = flow === "INCOME" ? "INCOME" : categoryType;
-    const catMatch = categories?.find(c => c.type === targetType);
-    if (!catMatch) return alert("Erro crítico: Categoria não encontrada em banco.");
+    if (activeTab === "GASTO") {
+       type = paymentMethod === "CREDITO" ? "CREDIT" : "DEBIT";
+       if (paymentMethod === "CREDITO") isPaid = false;
+    } else if (activeTab === "TRANSFERENCIA") {
+       type = "TRANSFER";
+    }
+
+    if (activeTab !== "TRANSFERENCIA" && !selectedCategoryId) return alert("Selecione uma categoria");
 
     const payload: TransactionCreatePayload = {
-       account_id: activeAccountId,
-       category_id: catMatch.id,
-       amount: parseFloat(amount.replace(",", ".")),
-       description: description || "Sem descrição",
+       account_id: selectedAccountId,
+       category_id: activeTab === "TRANSFERENCIA" ? categories?.[0]?.id || "" : selectedCategoryId!,
+       amount: parsedAmount,
+       description: description || (activeTab === "TRANSFERENCIA" ? "Transferência entre contas" : "Sem descrição"),
        transaction_date: new Date().toISOString().split("T")[0],
        is_paid: isPaid,
-       type: flow
+       type: type as any
     };
 
-    mutate(payload);
+    mutate(payload, {
+        onSuccess: () => setOpen(false)
+    });
   };
 
-  const isCreditFlow = flow === "CREDIT";
-  const showRiskWarning = isCreditFlow && categoryType === "VARIABLE_EXPENSE" && isInstallment;
-
-  const getThemeColor = () => {
-    if (flow === "INCOME") return "bg-emerald-500 shadow-emerald-500/30";
-    if (flow === "CREDIT") return "bg-amber-500 shadow-amber-500/30";
-    if (flow === "TRANSFER") return "bg-slate-700 shadow-slate-700/30";
-    return "bg-rose-500 shadow-rose-500/30";
-  };
-
-  const backdropVariants = { hidden: { opacity: 0 }, visible: { opacity: 1 } };
-  const sheetVariants = {
-    hidden: { y: "100%", opacity: 0, scale: 0.96 },
-    visible: { y: 0, opacity: 1, scale: 1, transition: { type: "spring" as const, damping: 25, stiffness: 200 } }
-  };
+  const catInfo = getActiveCategoryInfo();
+  const accInfo = getActiveAccountInfo(selectedAccountId);
+  const destAccInfo = getActiveAccountInfo(selectedDestinationAccountId);
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none px-4 pb-4">
-          <motion.div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm pointer-events-auto" variants={backdropVariants} initial="hidden" animate="visible" exit="hidden" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+          <motion.div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm pointer-events-auto" 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+            onClick={() => setOpen(false)} 
+          />
 
-          <motion.div className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl relative pointer-events-auto flex flex-col max-h-[90vh]" variants={sheetVariants} initial="hidden" animate="visible" exit="hidden" drag="y" dragConstraints={{ top: 0, bottom: 0 }} dragElastic={0.2} onDragEnd={(e, { offset, velocity }) => { if (offset.y > 100 || velocity.y > 400) setOpen(false); }}>
-            <div className="w-full flex justify-center py-4 shrink-0"><div className="w-12 h-1.5 bg-slate-200 rounded-full" /></div>
+          <motion.div 
+            className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl relative pointer-events-auto flex flex-col max-h-[92vh]" 
+            initial={{ y: 50, opacity: 0, scale: 0.95 }} 
+            animate={{ y: 0, opacity: 1, scale: 1 }} 
+            exit={{ y: 50, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          >
+            <div className="relative px-6 pt-6 pb-4 border-b border-slate-100 flex gap-6 shrink-0">
+               {["GASTO", "GANHO", "TRANSFERENCIA"].map(t => (
+                 <button key={t} onClick={() => setActiveTab(t as Tab)} 
+                   className={`text-lg font-bold capitalize transition-colors ${activeTab === t ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                   {t === "TRANSFERENCIA" ? "Transferência" : t.charAt(0) + t.slice(1).toLowerCase()}
+                 </button>
+               ))}
+               <button onClick={() => setOpen(false)} className="absolute right-5 top-6 text-slate-600 hover:text-slate-900 transition-colors">
+                 <X size={24} />
+               </button>
+            </div>
 
-            <div className="px-6 relative overflow-y-auto scrollbar-hide pb-8">
+            <div className="px-6 py-6 overflow-y-auto scrollbar-hide flex-1 space-y-6">
               
-              <div className="flex justify-between items-center mb-4 px-2">
-                 <div className="flex items-center gap-1.5 text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                    <Wallet size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{accounts?.[0]?.name || "Conta Oculta"}</span>
-                 </div>
+              {/* Value Input */}
+              <div>
+                <p className="text-sm font-bold text-slate-800 mb-1">
+                  Valor do {activeTab === "TRANSFERENCIA" ? "transferência" : activeTab.toLowerCase()} <span className="text-rose-500">*</span>
+                </p>
+                <div className="flex items-center">
+                  <input 
+                    type="text" 
+                    inputMode="decimal"
+                    placeholder="0,00" 
+                    value={amount} 
+                    onChange={handleAmountChange}
+                    className={`w-full text-5xl font-extrabold bg-transparent outline-none placeholder-slate-200 ${getAmountColor()} focus:ring-0`}
+                  />
+                </div>
               </div>
 
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-6">
-                 <button onClick={() => { setFlow("DEBIT"); setCategoryType("VARIABLE_EXPENSE"); }} className={`px-4 py-2.5 rounded-2xl whitespace-nowrap text-sm font-bold transition-all ${flow === "DEBIT" ? "bg-rose-50 text-rose-600 ring-2 ring-rose-200" : "bg-slate-50 text-slate-500"}`}>Pix/Débito</button>
-                 <button onClick={() => { setFlow("CREDIT"); setCategoryType("VARIABLE_EXPENSE"); }} className={`px-4 py-2.5 rounded-2xl whitespace-nowrap text-sm font-bold transition-all ${flow === "CREDIT" ? "bg-amber-50 text-amber-600 ring-2 ring-amber-200" : "bg-slate-50 text-slate-500"}`}>Cartão de Crédito</button>
-                 <button onClick={() => { setFlow("INCOME"); setCategoryType("INCOME"); setIsPaid(true); }} className={`px-4 py-2.5 rounded-2xl whitespace-nowrap text-sm font-bold transition-all ${flow === "INCOME" ? "bg-emerald-50 text-emerald-600 ring-2 ring-emerald-200" : "bg-slate-50 text-slate-500"}`}>Receita Base</button>
+              {/* Description */}
+              <div>
+                <p className="text-sm font-bold text-slate-800 mb-2">Descrição <span className="text-rose-500">*</span></p>
+                <input 
+                  type="text" 
+                  placeholder={activeTab === "GANHO" ? "Digite sua descrição" : "Exemplo: tênis novo"}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 font-medium transition-colors shadow-sm"
+                />
               </div>
 
-              <div className="mb-8 flex flex-col items-center select-none">
-                 <div className="flex items-center justify-center gap-1">
-                    <span className="text-3xl font-bold text-slate-300">R$</span>
-                    <input type="text" inputMode="decimal" className="text-[3.5rem] h-16 border-none outline-none focus:ring-0 text-center font-black text-slate-800 placeholder-slate-200 w-[200px]" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                 </div>
+              {/* Categorias (Oculto em Transferência) */}
+              {activeTab !== "TRANSFERENCIA" && (
+                <div>
+                  <p className="text-sm font-bold text-slate-800 mb-2">Categoria <span className="text-rose-500">*</span></p>
+                  <button className="w-full bg-slate-50/50 border border-slate-100 rounded-xl p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                     <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-lg ${catInfo.bg} flex items-center justify-center text-white shadow-sm`}>
+                           {catInfo.icon}
+                        </div>
+                        <span className="font-bold text-slate-800">{catInfo.name}</span>
+                     </div>
+                     <ChevronRight size={20} className="text-emerald-600" />
+                  </button>
+                </div>
+              )}
+
+              {/* Conta Selection */}
+              <div>
+                <p className="text-sm font-bold text-slate-800 mb-2">
+                  {activeTab === "TRANSFERENCIA" ? "Conta origem *" : "Conta *"}
+                </p>
+                <button className="w-full bg-slate-50/50 border border-slate-100 rounded-xl p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                   <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-sm">
+                         <Wallet size={20} />
+                      </div>
+                      <span className="font-bold text-slate-800">{accInfo.name}</span>
+                   </div>
+                   <ChevronRight size={20} className="text-emerald-600" />
+                </button>
               </div>
 
-              <div className="space-y-4">
-                 <div className="bg-slate-50 rounded-3xl p-3 border border-slate-100 flex flex-col gap-2">
-                    <input type="text" placeholder="Qual a descrição? (Ex: Almoço)" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 font-bold" value={description} onChange={(e) => setDescription(e.target.value)} />
-                 </div>
+              {/* Destino Transferência */}
+              {activeTab === "TRANSFERENCIA" && (
+                <div>
+                  <p className="text-sm font-bold text-slate-800 mb-2">Conta destino *</p>
+                  <button className="w-full bg-slate-50/50 border border-slate-100 rounded-xl p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                     <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white shadow-sm">
+                           <Wallet size={20} />
+                        </div>
+                        <span className="font-bold text-slate-800">{destAccInfo.name}</span>
+                     </div>
+                     <ChevronRight size={20} className="text-emerald-600" />
+                  </button>
+                </div>
+              )}
 
-                 {!isCreditFlow ? (
-                    <div className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-3xl shadow-sm">
-                       <div><p className="font-bold text-sm text-slate-800">Já Abateu no Caixa?</p></div>
-                       <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" className="sr-only peer" checked={isPaid} onChange={() => setIsPaid(!isPaid)} />
-                          <div className="w-12 h-7 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500"></div>
-                       </label>
-                    </div>
-                 ) : (
-                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-center gap-3">
-                       <AlertTriangle size={20} className="text-amber-500 shrink-0" />
-                       <p className="text-[11px] text-amber-700 font-bold leading-tight">O Cartão não altera seu caixa livre hoje.</p>
-                    </div>
-                 )}
+              {/* Forma de Pagamento (Apenas Gasto) */}
+              {activeTab === "GASTO" && (
+                <div>
+                  <p className="text-sm font-bold text-slate-800 mb-2">Forma de pagamento <span className="text-rose-500">*</span></p>
+                  <div className="flex gap-3">
+                    <button onClick={() => setPaymentMethod("CREDITO")} className={`px-5 py-2.5 rounded-full text-sm font-bold transition-colors ${paymentMethod === "CREDITO" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>Cartão de Crédito</button>
+                    <button onClick={() => setPaymentMethod("DEBITO")} className={`px-5 py-2.5 rounded-full text-sm font-bold transition-colors ${paymentMethod === "DEBITO" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>Débito</button>
+                  </div>
+                </div>
+              )}
 
-                 <AnimatePresence>
-                    {showRiskWarning && (
-                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-300 p-4 rounded-[2rem] flex gap-3 items-center shadow-sm">
-                           <AlertTriangle size={24} className="text-amber-500 shrink-0" />
-                           <p className="text-[11px] font-extrabold text-amber-900 leading-tight pr-2">⚠️ Parcelar consumo livre corrói o Diário Médio futuro!</p>
-                        </motion.div>
-                    )}
-                 </AnimatePresence>
+              {/* Condição de Pagamento (Apenas Gasto) */}
+              {activeTab === "GASTO" && (
+                <div>
+                  <p className="text-sm font-bold text-slate-800 mb-2">Condição de pagamento <span className="text-rose-500">*</span></p>
+                  <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+                    <button onClick={() => setPaymentCondition("A_VISTA")} className={`px-5 py-2.5 shrink-0 rounded-full text-sm font-bold transition-colors ${paymentCondition === "A_VISTA" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>À vista</button>
+                    <button onClick={() => setPaymentCondition("PARCELADO")} className={`px-5 py-2.5 shrink-0 rounded-full text-sm font-bold transition-colors ${paymentCondition === "PARCELADO" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>Parcelado</button>
+                    <button onClick={() => setPaymentCondition("RECORRENTE")} className={`px-5 py-2.5 shrink-0 rounded-full text-sm font-bold transition-colors ${paymentCondition === "RECORRENTE" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>Recorrente</button>
+                  </div>
+                </div>
+              )}
 
+              {/* Pick Data */}
+              {(activeTab === "GANHO" || activeTab === "TRANSFERENCIA") && (
+                <div>
+                   <p className="text-sm font-bold text-slate-800 mb-2">Data <span className="text-rose-500">*</span></p>
+                   <div className="flex gap-3">
+                    <button onClick={() => setDateSelection("HOJE")} className={`px-8 py-2.5 rounded-full text-sm font-bold transition-colors ${dateSelection === "HOJE" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>Hoje</button>
+                    <button onClick={() => setDateSelection("OUTRO")} className={`px-8 py-2.5 rounded-full text-sm font-bold transition-colors ${dateSelection === "OUTRO" ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white text-slate-700 border border-slate-200'}`}>Outro</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2">
                  <motion.button 
                     whileTap={{ scale: 0.97 }}
                     onClick={handleSubmit}
                     disabled={isPending}
-                    className={`w-full py-5 rounded-[2rem] flex items-center justify-center text-white font-extrabold text-lg shadow-lg transition-all ${getThemeColor()} ${isPending ? 'opacity-70 pointer-events-none' : ''}`}
+                    className={`w-full py-4 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-emerald-500/30 transition-all bg-[#74CBA8] hover:bg-[#60b08f] ${isPending ? 'opacity-70 pointer-events-none' : ''}`}
                  >
-                    {isPending ? <Loader2 className="animate-spin" /> : "Registrar Lançamento"}
+                    {isPending ? <Loader2 className="animate-spin" /> : 
+                     activeTab === "GASTO" ? "Registrar gasto" : 
+                     activeTab === "GANHO" ? "Registrar ganho" : "Registrar transferência"}
                  </motion.button>
               </div>
+
             </div>
           </motion.div>
         </div>

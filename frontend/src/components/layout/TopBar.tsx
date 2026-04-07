@@ -2,6 +2,8 @@
 import React from 'react';
 import { useBudgetStore } from '@/store/budgetStore';
 import { useDailyBudget } from '@/hooks/useBudget';
+import Link from 'next/link';
+import SmartFAB from '@/components/ui/SmartFAB';
 
 export default function TopBar() {
   const { status, dailyAverage, message } = useBudgetStore();
@@ -23,7 +25,7 @@ export default function TopBar() {
   };
 
   return (
-    <div className={`w-full px-5 pt-6 pb-5 transition-colors duration-700 ease-in-out ${getBackgroundColor()} sticky top-0 z-40 rounded-b-[2rem] shadow-md`}>
+    <div className={`w-full px-5 md:px-10 pt-6 pb-6 transition-colors duration-700 ease-in-out ${getBackgroundColor()} sticky top-0 z-40 md:rounded-b-none shadow-md`}>
       <div className="flex justify-between items-start">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-0.5">
@@ -41,6 +43,16 @@ export default function TopBar() {
         <p className="text-xs font-semibold opacity-95 tracking-wide">
           {status === "loading" ? "Conectando ao banco FastAPI..." : message}
         </p>
+      </div>
+
+      <div className="hidden md:flex mt-6 gap-3 items-center w-full max-w-fit bg-black/10 p-2 rounded-2xl backdrop-blur-md border border-white/10">
+          <Link href="/" className="px-5 py-2 hover:bg-white/20 text-white font-bold text-sm rounded-xl transition">Início</Link>
+          <Link href="/stats" className="px-5 py-2 hover:bg-white/20 text-white font-bold text-sm rounded-xl transition">Estatísticas</Link>
+          <Link href="/goals" className="px-5 py-2 hover:bg-white/20 text-white font-bold text-sm rounded-xl transition">Cofres</Link>
+          <Link href="/profile" className="px-5 py-2 hover:bg-white/20 text-white font-bold text-sm rounded-xl transition">Perfil</Link>
+          <div className="ml-4 pl-4 border-l border-white/20 flex items-center">
+              <SmartFAB />
+          </div>
       </div>
     </div>
   );
