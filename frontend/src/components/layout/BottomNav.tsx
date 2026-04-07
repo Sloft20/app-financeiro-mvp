@@ -20,7 +20,9 @@ export default function BottomNav() {
         </Link>
         
         {/* Smart FAB Injected here overlapping dynamically */}
-        <SmartFAB />
+        <div className="absolute left-1/2 -top-6 -translate-x-1/2 z-50">
+           <SmartFAB />
+        </div>
 
         <Link href="/goals" className="flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors ml-6 w-12 group">
           <Target size={24} strokeWidth={2.5} className="mb-0.5 group-hover:-translate-y-1 transition-transform" />

@@ -26,10 +26,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${inter.className} bg-slate-900 flex items-center justify-center min-h-[100dvh] text-slate-800 antialiased overflow-hidden`}>
+      <body className={`${inter.className} bg-slate-50 flex flex-col min-h-[100dvh] text-slate-800 antialiased overflow-hidden`}>
         <QueryProvider>
           <AuthProvider>
-            <main className="w-full md:max-w-2xl lg:max-w-5xl h-[100dvh] bg-slate-50 relative overflow-hidden flex flex-col mx-auto md:shadow-2xl md:ring-1 md:ring-slate-200">
+            <main className="w-full h-[100dvh] relative overflow-hidden flex flex-col">
               {children}
             </main>
           </AuthProvider>
