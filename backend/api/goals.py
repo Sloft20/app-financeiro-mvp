@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
-from core.database import get_supabase
+from core.database import get_supabase, get_token
 from models.schemas import GoalCreate, GoalResponse
 
 router = APIRouter(prefix="/goals", tags=["Goals/Cofres"])
@@ -14,9 +14,11 @@ def get_goals(db: Client = Depends(get_supabase)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/", response_model=GoalResponse)
-def create_goal(payload: GoalCreate, db: Client = Depends(get_supabase)):
+def create_goal(payload: GoalCreate, db: Client = Depends(get_supabase), token: str = Depends(get_token)):
     try:
+        uid = getattr(db.auth.get_user(token), "user", db.auth.get_user(token)).id
         data = payload.model_dump(mode="json")
+        data["user_id"] = uid
         res = db.table("goals").insert(data).execute()
         return res.data[0]
     except Exception as e:

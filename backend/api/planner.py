@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
-from core.database import get_supabase
+from core.database import get_supabase, get_token
 from models.schemas import BudgetCreate, BudgetResponse
 
 router = APIRouter(prefix="/planner", tags=["Planner/Budgets"])
@@ -18,13 +18,12 @@ def get_budgets(db: Client = Depends(get_supabase)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/", response_model=BudgetResponse)
-def set_budget(payload: BudgetCreate, db: Client = Depends(get_supabase)):
-    """
-    Cadastra ou tenta provisionar um limite para uma categoria.
-    No MVP, faremos inserção direta.
-    """
+def create_budget(payload: BudgetCreate, db: Client = Depends(get_supabase), token: str = Depends(get_token)):
     try:
+        uid = getattr(db.auth.get_user(token), "user", db.auth.get_user(token)).id
         data = payload.model_dump(mode="json")
+        data["user_id"] = uid
+        data["reference_month"] = data["reference_month"] + "-01"
         res = db.table("budgets").insert(data).execute()
         
         if not res.data:

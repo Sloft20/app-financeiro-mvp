@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
-from core.database import get_supabase
+from core.database import get_supabase, get_token
 from models.schemas import TransactionCreate, TransactionResponse, TransactionType, CategoryType
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
@@ -8,7 +8,8 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 @router.post("/", response_model=TransactionResponse)
 def create_transaction(
     payload: TransactionCreate, 
-    db: Client = Depends(get_supabase)
+    db: Client = Depends(get_supabase),
+    token: str = Depends(get_token)
 ):
     """
     Cria uma nova transação aplicando a Regra Crítica: Caixa vs Competência.
@@ -21,9 +22,11 @@ def create_transaction(
     category = cat_res.data[0]
     is_income = (category["type"] == CategoryType.INCOME.value)
 
-    # 2. Inserir a Transação (O RLS garante que isso funciona APENAS se o user enviar o account_id dele)
+    # 2. Inserir a Transação
     try:
+        uid = getattr(db.auth.get_user(token), "user", db.auth.get_user(token)).id
         insert_data = payload.model_dump(mode="json") 
+        insert_data["user_id"] = uid
         # Forçamos a limpeza de dependências nulas para o Supabase
         insert_data = {k: v for k, v in insert_data.items() if v is not None}
         

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
-from core.database import get_supabase
+from core.database import get_supabase, get_token
 from models.schemas import AccountCreate, AccountResponse
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
@@ -17,12 +17,13 @@ def get_accounts(db: Client = Depends(get_supabase)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/setup", response_model=AccountResponse)
-def setup_initial_account(payload: AccountCreate, db: Client = Depends(get_supabase)):
+def setup_initial_account(payload: AccountCreate, db: Client = Depends(get_supabase), token: str = Depends(get_token)):
     """
     Onboarding: Cria uma conta base e faz o SEED inicial de categorias essenciais para não quebrar a Foreign Key.
     """
     try:
-        user = db.auth.get_user().user
+        res = db.auth.get_user(token)
+        user = res.user if hasattr(res, "user") else res
         if not user:
              raise HTTPException(status_code=401, detail="Log in required")
              
